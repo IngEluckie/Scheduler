@@ -2,10 +2,11 @@
 
 # Import libraries
 from dataclasses import dataclass, field
+import asyncio
 import json
 from datetime import datetime, time
 from enum import Enum
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Callable, Awaitable
 try:
     # Requiere Python 3.9+
     from zoneinfo import ZoneInfo
@@ -14,8 +15,8 @@ except Exception:
     MX_TZ = None
 
 # Import modules
-from terminalTools import CsvManager, Logger
-from ollamaCalls import rapidaUmigus
+from routers.utilities.terminalTools import CsvManager, Logger
+from routers.utilities.ollamaCalls import rapidaUmigus
 
 # Variables
 log: CsvManager = CsvManager("log") # Para log de errores, mensajes y demás...
@@ -263,6 +264,18 @@ class ObsidianRecurrent:
     pass
 
 # Scheduler
+
+forced_tasks: dict = {
+    "publicacionFbUmigus": {
+        "funcion": rapidaUmigus,
+        "mode": "AUTO",
+        "due": "DAILY",
+        "priority": "MED",
+        "labels": ["forced", "umigus"],
+        "source": "scheduler:forced",
+    },
+    "publicacionFbGenesys": "ñu"
+}
 
 # Inicializar lista de actividades del día
 # Inicializar lista de actividades recurrentes del día
@@ -553,6 +566,11 @@ class Scheduler:
 
                     mlog.success("Propuesta de publicación Umigus ejecutada y registrada como DONE.")
 
+                    if self._send_chat_message and self._channel_id:
+                        asyncio.get_running_loop().create_task(
+                            self._send_chat_message(resultado, self._channel_id)
+                        )
+
             except Exception as e:
                 mlog.error(f"Error ejecutando tarea forzada '{name}': {type(e).__name__}: {e}")
 
@@ -574,15 +592,24 @@ class Scheduler:
             _accion()
         else:
             mlog.info("- [x] Publicación FB Umigus ya realizada. Tarea ignorada")
+
                 
+    def _getRegistryRecord(self):
+        pass
 
 
+    def __init__(
+            self,
+            send_chat_message: Optional[Callable[[str, int], Awaitable[None]]] = None,
+            channel_id: Optional[int] = None
+        ) -> None:
+        
+        self._send_chat_message = send_chat_message
+        self._channel_id = channel_id
 
-    def __init__(self, ) -> None:
-        #self.send_chat_message = send_chat_message
-        today = now_mx().date().isoformat()  # "YYYY-MM-DD"
-        print(today)
-        registries = self._searchRegistries(today)
+        self.today = now_mx().date().isoformat()  # "YYYY-MM-DD"
+        #print(self.today)
+        registries = self._searchRegistries(self.today)
         tasks = self._getTasks(registries)
         self._routine(tasks)
 
